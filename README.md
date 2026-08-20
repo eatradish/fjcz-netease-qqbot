@@ -5,7 +5,7 @@ Rust + OneBot 11 点歌机器人。
 在 NapCat 中同时配置：
 
 - HTTP Server：启用，监听例如 127.0.0.1:3000，用于 Rust 调用 OneBot API。
-- HTTP Client：目标地址设置为 http://127.0.0.1:8080/onebot，用于 NapCat 上报消息。
+- HTTP Client：目标地址设置为 `http://127.0.0.1:8080/onebot`，用于 NapCat 上报消息。
 
 OneBot HTTP API 的地址填入 config.toml 的 onebot_api_base，然后执行：
 
