@@ -27,7 +27,7 @@ OneBot HTTP API 的地址填入 config.toml 的 onebot_api_base，然后执行�
 
     cargo run -- login-qr --cookie-file ./netease_cookie.txt
 
-把 OneBot HTTP 上报地址设置为 http://127.0.0.1:8080/onebot，在 QQ 中发送“点歌 稻香”。
+把 OneBot HTTP 上报地址设置为 `http://127.0.0.1:8080/onebot`，在 QQ 中发送“点歌 蝴蝶”。
 
 机器人会通过 ncm-api-rs 搜索歌曲，并使用 OneBot 的 record 消息段发送语音。若适配器不支持直接发送 MP3 URL，需要增加 ffmpeg/SILK 转码。
 
