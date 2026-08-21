@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
 use clap::{Parser, Subcommand};
 use ncm_api_rs::{ApiClient, Query, create_client};
@@ -126,14 +126,15 @@ async fn main() -> Result<()> {
         "loaded configuration"
     );
 
-    let addr = config.listen_addr.clone();
+    let config = Arc::new(config);
+    let addr = &config.clone().listen_addr;
     let cookie = tokio::fs::read_to_string(&config.netease_cookie_file)
         .await
         .ok()
         .filter(|cookie| !cookie.trim().is_empty());
 
     let state = AppState {
-        config: Arc::new(config),
+        config,
         client: Client::builder().user_agent("qq-music-bot/0.1").build()?,
         ncm: create_client(cookie),
     };
@@ -143,7 +144,7 @@ async fn main() -> Result<()> {
         .route("/onebot", post(webhook))
         .with_state(state);
 
-    let listener = TcpListener::bind(&addr).await?;
+    let listener = TcpListener::bind(addr).await?;
     info!("listening on http://{addr}/onebot");
     axum::serve(listener, app).await?;
 
@@ -177,12 +178,12 @@ async fn login_qr(cookie_file: &Path) -> Result<()> {
         let response = ncm.login_qr_check(&Query::new().param("key", &key)).await?;
         let code = response.body["code"].as_i64().unwrap_or_default();
         match code {
-            800 => anyhow::bail!("二维码已失效，请重新执行 cargo run -- login-qr"),
+            800 => bail!("二维码已失效，请重新执行 cargo run -- login-qr"),
             803 => {
                 let cookie = response.cookie.join("; ");
 
                 if cookie.is_empty() {
-                    anyhow::bail!("登录成功但网易云没有返回 Cookie");
+                    bail!("登录成功但网易云没有返回 Cookie");
                 }
 
                 tokio::fs::write(cookie_file, &cookie)
@@ -329,7 +330,7 @@ async fn send(state: &AppState, event: &Event, message: Vec<Segment>) -> Result<
     match kind {
         "group" => payload["group_id"] = json!(event.group_id.context("缺少 group_id")?),
         "private" => payload["user_id"] = json!(event.user_id.context("缺少 user_id")?),
-        other => anyhow::bail!("不支持的消息类型：{other}"),
+        other => bail!("不支持的消息类型：{other}"),
     }
 
     let mut req = state
@@ -346,7 +347,7 @@ async fn send(state: &AppState, event: &Event, message: Vec<Segment>) -> Result<
 
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();
-        anyhow::bail!("OneBot send_msg 返回 {status}: {body}");
+        bail!("OneBot send_msg 返回 {status}: {body}");
     }
 
     Ok(())
