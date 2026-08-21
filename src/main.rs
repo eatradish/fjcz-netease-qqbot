@@ -270,7 +270,7 @@ async fn process(state: &AppState, event: &Event, keyword: &str) -> Result<()> {
         .param("limit", "1")
         .param("type", "1");
 
-    let body: Value = state.ncm.cloudsearch(&query).await?.body;
+    let body = state.ncm.cloudsearch(&query).await?.body;
 
     let Some(song) = body["result"]["songs"].as_array().and_then(|v| v.first()) else {
         return send_text(state, event, &format!("没有找到歌曲：{keyword}")).await;
@@ -296,7 +296,7 @@ async fn process(state: &AppState, event: &Event, keyword: &str) -> Result<()> {
         .param("id", &id_text)
         .param("level", "standard");
 
-    let url: Value = state.ncm.song_url_v1(&query).await?.body;
+    let url = state.ncm.song_url_v1(&query).await?.body;
 
     let Some(audio) = url["data"]
         .as_array()
