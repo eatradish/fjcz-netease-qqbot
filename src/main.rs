@@ -8,6 +8,7 @@ use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
+    borrow::Cow,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -108,14 +109,24 @@ async fn main() -> Result<()> {
                 .context("请复制 config.example.toml 为 config.toml")?;
             toml::from_str(&text).context("config.toml 格式错误")?
         }
-        None => Config {
-            listen_addr: cli.listen_addr.clone(),
-            onebot_api_base: cli.onebot_api_base.clone().context(
-                "请通过 --config 指定配置文件，或通过 --onebot-api-base 指定 OneBot API 地址",
-            )?,
-            onebot_access_token: cli.onebot_access_token.clone(),
-            netease_cookie_file: cli.netease_cookie_file.clone(),
-        },
+        None => {
+            let Cli {
+                listen_addr,
+                netease_cookie_file,
+                onebot_api_base,
+                onebot_access_token,
+                ..
+            } = cli;
+
+            Config {
+                listen_addr,
+                onebot_api_base: onebot_api_base.context(
+                    "请通过 --config 指定配置文件，或通过 --onebot-api-base 指定 OneBot API 地址",
+                )?,
+                onebot_access_token,
+                netease_cookie_file,
+            }
+        }
     };
 
     info!(
@@ -157,8 +168,7 @@ async fn login_qr(cookie_file: &Path) -> Result<()> {
     let key = key_response.body["data"]["unikey"]
         .as_str()
         .or_else(|| key_response.body["unikey"].as_str())
-        .context("网易云没有返回二维码 key")?
-        .to_owned();
+        .context("网易云没有返回二维码 key")?;
 
     let qr_url = format!("https://music.163.com/login?codekey={key}");
 
@@ -215,7 +225,8 @@ async fn webhook(State(state): State<AppState>, Json(event): Json<Event>) -> Sta
 
     let text = event
         .raw_message
-        .clone()
+        .as_deref()
+        .map(Cow::Borrowed)
         .or_else(|| event.message.as_ref().and_then(message_text))
         .unwrap_or_default();
 
@@ -238,9 +249,9 @@ async fn webhook(State(state): State<AppState>, Json(event): Json<Event>) -> Sta
     StatusCode::OK
 }
 
-fn message_text(message: &Value) -> Option<String> {
+fn message_text(message: &Value) -> Option<Cow<'_, str>> {
     if let Some(text) = message.as_str() {
-        return Some(text.to_owned());
+        return Some(text.into());
     }
 
     let segments = message.as_array()?;
@@ -250,7 +261,7 @@ fn message_text(message: &Value) -> Option<String> {
         .filter_map(|segment| segment["data"]["text"].as_str())
         .collect::<String>();
 
-    Some(text)
+    Some(text.into())
 }
 
 async fn process(state: &AppState, event: &Event, keyword: &str) -> Result<()> {
@@ -266,7 +277,7 @@ async fn process(state: &AppState, event: &Event, keyword: &str) -> Result<()> {
     };
 
     let id = song["id"].as_i64().context("搜索结果缺少歌曲 ID")?;
-    let name = song["name"].as_str().unwrap_or("未知歌曲").to_owned();
+    let name = song["name"].as_str().unwrap_or("未知歌曲");
     let artist = song["ar"]
         .as_array()
         .map(|v| {
@@ -275,10 +286,12 @@ async fn process(state: &AppState, event: &Event, keyword: &str) -> Result<()> {
                 .collect::<Vec<_>>()
                 .join("、")
         })
+        .map(Cow::<'_, str>::Owned)
         .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| "未知歌手".to_owned());
+        .unwrap_or_else(|| "未知歌手".into());
 
     let id_text = id.to_string();
+
     let query = Query::new()
         .param("id", &id_text)
         .param("level", "standard");
@@ -292,6 +305,7 @@ async fn process(state: &AppState, event: &Event, keyword: &str) -> Result<()> {
     else {
         return send_text(state, event, &format!("《{name}》暂无可用播放地址。")).await;
     };
+
     info!(%name, %artist, "send record");
 
     send(
@@ -355,9 +369,9 @@ async fn send(state: &AppState, event: &Event, message: Vec<Segment>) -> Result<
 
 fn api_url(base: &str, path: &str) -> Result<Url> {
     let base = if base.ends_with('/') {
-        base.to_owned()
+        Cow::Borrowed(base)
     } else {
-        format!("{base}/")
+        Cow::Owned(format!("{base}/"))
     };
 
     Ok(Url::parse(&base)?.join(path.trim_start_matches('/'))?)
