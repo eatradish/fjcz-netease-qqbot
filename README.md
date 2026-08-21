@@ -10,7 +10,7 @@ Rust + OneBot 11 点歌机器人。
 OneBot HTTP API 的地址填入 config.toml 的 onebot_api_base，然后执行：
 
     cp config.example.toml config.toml
-    cargo run
+    cargo run -- --config config.toml
 
 首次使用可以先登录网易云账号：
 
