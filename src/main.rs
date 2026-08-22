@@ -84,6 +84,7 @@ struct Event {
     message: Option<Value>,
     user_id: Option<i64>,
     group_id: Option<i64>,
+    message_id: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -239,6 +240,11 @@ async fn webhook(State(state): State<AppState>, Json(event): Json<Event>) -> Sta
         return StatusCode::OK;
     }
 
+    // 给点歌人的消息做一个 👀 表情回应
+    if let Err(e) = send_emoji_like(&state, &event).await {
+        error!(?e, "发送点歌表情回应失败");
+    }
+
     let keyword = keyword.to_owned();
     tokio::spawn(async move {
         if let Err(e) = process(&state, &event, &keyword).await {
@@ -362,6 +368,42 @@ async fn send(state: &AppState, event: &Event, message: Vec<Segment>) -> Result<
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();
         bail!("OneBot send_msg 返回 {status}: {body}");
+    }
+
+    Ok(())
+}
+
+/// 👀 (U+1F440) 在 QQ 表情回应中的 emoji_id（unicode 码点十进制）
+const EYES_EMOJI_ID: &str = "128064";
+
+/// 给指定消息设置一个 👀 表情回应（长按消息选表情那种）
+async fn send_emoji_like(state: &AppState, event: &Event) -> Result<()> {
+    let Some(message_id) = event.message_id else {
+        bail!("缺少 message_id");
+    };
+
+    let mut req = state
+        .client
+        .post(api_url(&state.config.onebot_api_base, "set_msg_emoji_like")?)
+        .json(&json!({
+            "message_id": message_id,
+            "emoji_id": EYES_EMOJI_ID,
+            "set": true,
+        }));
+
+    if let Some(token) = &state.config.onebot_access_token {
+        req = req.bearer_auth(token.trim());
+    }
+
+    let response = req
+        .send()
+        .await
+        .context("请求 OneBot set_msg_emoji_like 失败")?;
+    let status = response.status();
+
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        bail!("OneBot set_msg_emoji_like 返回 {status}: {body}");
     }
 
     Ok(())
